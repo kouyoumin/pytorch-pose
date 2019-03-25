@@ -1,3 +1,4 @@
+from .cmuhand import cmuhand
 from .mpii import mpii
 from .coco import coco
 from .lsp import lsp

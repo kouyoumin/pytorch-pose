@@ -11,8 +11,8 @@ from .imutils import *
 
 
 def color_normalize(x, mean, std):
-    if x.size(0) == 1:
-        x = x.repeat(3, 1, 1)
+    #if x.size(0) == 1:
+    #    x = x.repeat(3, 1, 1)
 
     for t, m, s in zip(x, mean, std):
         t.sub_(m)
@@ -52,17 +52,18 @@ def shufflelr(x, width, dataset='mpii'):
             [0,5],   [1,4],   [2,3],
             [10,15], [11,14], [12,13]
         )
-    else:
-        print('Not supported dataset: ' + dataset)
+    #else:
+    #    print('Not supported dataset: ' + dataset)
 
     # Flip horizontal
     x[:, 0] = width - x[:, 0]
 
     # Change left-right parts
-    for pair in matchedParts:
-        tmp = x[pair[0], :].clone()
-        x[pair[0], :] = x[pair[1], :]
-        x[pair[1], :] = tmp
+    if dataset ==  'mpii':
+        for pair in matchedParts:
+            tmp = x[pair[0], :].clone()
+            x[pair[0], :] = x[pair[1], :]
+            x[pair[1], :] = tmp
 
     return x
 

@@ -53,6 +53,8 @@ def main(args):
         idx = [1,2,3,4,5,6,11,12,15,16]
     elif args.dataset == 'coco':
         idx = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17]
+    elif args.dataset == 'cmuhand':
+        idx = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21]
     else:
         print("Unknown dataset: {}".format(args.dataset))
         assert False
@@ -68,7 +70,8 @@ def main(args):
     model = models.__dict__[args.arch](num_stacks=args.stacks,
                                        num_blocks=args.blocks,
                                        num_classes=njoints,
-                                       resnet_layers=args.resnet_layers)
+                                       resnet_layers=args.resnet_layers,
+                                       num_feats=args.features)
 
     model = torch.nn.DataParallel(model).to(device)
 
@@ -190,6 +193,7 @@ def train(train_loader, model, criterion, optimizer, debug=False, flip=True):
         # measure data loading time
         data_time.update(time.time() - end)
 
+        #print(input.shape, target.shape)
         input, target = input.to(device), target.to(device, non_blocking=True)
         target_weight = meta['target_weight'].to(device, non_blocking=True)
 
@@ -354,9 +358,9 @@ if __name__ == '__main__':
                         help='path to annotation (json)')
     parser.add_argument('--year', default=2014, type=int, metavar='N',
                         help='year of coco dataset: 2014 (default) | 2017)')
-    parser.add_argument('--inp-res', default=256, type=int,
-                        help='input resolution (default: 256)')
-    parser.add_argument('--out-res', default=64, type=int,
+    parser.add_argument('--inp-res', default=128, type=int,
+                        help='input resolution (default: 128)')
+    parser.add_argument('--out-res', default=32, type=int,
                     help='output resolution (default: 64, to gen GT)')
 
     # Model structure
@@ -367,9 +371,9 @@ if __name__ == '__main__':
                             ' (default: hg)')
     parser.add_argument('-s', '--stacks', default=8, type=int, metavar='N',
                         help='Number of hourglasses to stack')
-    parser.add_argument('--features', default=256, type=int, metavar='N',
+    parser.add_argument('--features', default=128, type=int, metavar='N',
                         help='Number of features in the hourglass')
-    parser.add_argument('--resnet-layers', default=50, type=int, metavar='N',
+    parser.add_argument('--resnet-layers', default=18, type=int, metavar='N',
                         help='Number of resnet layers',
                         choices=[18, 34, 50, 101, 152])
     parser.add_argument('-b', '--blocks', default=1, type=int, metavar='N',
@@ -384,17 +388,17 @@ if __name__ == '__main__':
                         help='number of total epochs to run')
     parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                         help='manual epoch number (useful on restarts)')
-    parser.add_argument('--train-batch', default=6, type=int, metavar='N',
+    parser.add_argument('--train-batch', default=16, type=int, metavar='N',
                         help='train batchsize')
-    parser.add_argument('--test-batch', default=6, type=int, metavar='N',
+    parser.add_argument('--test-batch', default=16, type=int, metavar='N',
                         help='test batchsize')
-    parser.add_argument('--lr', '--learning-rate', default=2.5e-4, type=float,
+    parser.add_argument('--lr', '--learning-rate', default=5e-4, type=float,
                         metavar='LR', help='initial learning rate')
     parser.add_argument('--momentum', default=0, type=float, metavar='M',
                         help='momentum')
-    parser.add_argument('--weight-decay', '--wd', default=0, type=float,
+    parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float,
                         metavar='W', help='weight decay (default: 0)')
-    parser.add_argument('--schedule', type=int, nargs='+', default=[60, 90],
+    parser.add_argument('--schedule', type=int, nargs='+', default=[40, 70, 90],
                         help='Decrease learning rate at these epochs.')
     parser.add_argument('--gamma', type=float, default=0.1,
                         help='LR is multiplied by gamma on schedule.')

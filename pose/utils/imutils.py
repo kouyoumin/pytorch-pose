@@ -8,20 +8,26 @@ import scipy.misc
 from .misc import *
 
 def im_to_numpy(img):
-    img = to_numpy(img)
-    img = np.transpose(img, (1, 2, 0)) # H*W*C
+    if img.shape[0] == 1:
+        img = to_numpy(img.squeeze(0))
+    else:
+        img = to_numpy(img)
+        img = np.transpose(img, (1, 2, 0)) # H*W*C
     return img
 
 def im_to_torch(img):
-    img = np.transpose(img, (2, 0, 1)) # C*H*W
-    img = to_torch(img).float()
+    if len(img.shape) > 2:
+        img = np.transpose(img, (2, 0, 1)) # C*H*W
+        img = to_torch(img).float()
+    else:
+        img = to_torch(img).float().unsqueeze_(0)
     if img.max() > 1:
         img /= 255
     return img
 
-def load_image(img_path):
+def load_image(img_path, mode='RGB'):
     # H x W x C => C x H x W
-    return im_to_torch(scipy.misc.imread(img_path, mode='RGB'))
+    return im_to_torch(scipy.misc.imread(img_path, mode))
 
 def resize(img, owidth, oheight):
     img = im_to_numpy(img)
@@ -134,9 +140,14 @@ def sample_with_heatmap(inp, out, num_rows=2, parts_to_show=None):
     inp = to_numpy(inp * 255)
     out = to_numpy(out)
 
-    img = np.zeros((inp.shape[1], inp.shape[2], inp.shape[0]))
-    for i in range(3):
-        img[:, :, i] = inp[i, :, :]
+    img = np.zeros((inp.shape[1], inp.shape[2], 3))
+    for i in range(inp.shape[0]):
+        if inp.shape[0] == 1:
+            img[:, :, 0] = inp[0, :, :]
+            img[:, :, 1] = inp[0, :, :]
+            img[:, :, 2] = inp[0, :, :]
+        else:
+            img[:, :, i] = inp[i, :, :]
 
     if parts_to_show is None:
         parts_to_show = np.arange(out.shape[0])
@@ -168,7 +179,10 @@ def sample_with_heatmap(inp, out, num_rows=2, parts_to_show=None):
 def batch_with_heatmap(inputs, outputs, mean=torch.Tensor([0.5, 0.5, 0.5]).cuda(), num_rows=2, parts_to_show=None):
     batch_img = []
     for n in range(min(inputs.size(0), 4)):
-        inp = inputs[n] + mean.view(3, 1, 1).expand_as(inputs[n])
+        if inputs.size(1) == 3:
+            inp = inputs[n] + mean.view(3, 1, 1).expand_as(inputs[n])
+        else:
+            inp = inputs[n] + mean[0]
         batch_img.append(
             sample_with_heatmap(inp.clamp(0, 1), outputs[n], num_rows=num_rows, parts_to_show=parts_to_show)
         )

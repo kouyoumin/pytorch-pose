@@ -3,6 +3,7 @@ Hourglass network inserted in the pre-activated Resnet
 Use lr=0.01 for current version
 (c) YANG, Wei
 '''
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -95,16 +96,22 @@ class Hourglass(nn.Module):
 
 class HourglassNet(nn.Module):
     '''Hourglass model from Newell et al ECCV 2016'''
-    def __init__(self, block, num_stacks=2, num_blocks=4, num_classes=16):
+    def __init__(self, block, num_stacks=2, num_blocks=4, num_classes=16, num_feats = 128):
         super(HourglassNet, self).__init__()
 
-        self.inplanes = 64
-        self.num_feats = 128
+        '''self.inplanes = 16
+        self.num_feats = num_feats
         self.num_stacks = num_stacks
-        self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3,
+        self.conv1 = nn.Conv2d(1, self.inplanes//2, kernel_size=3, stride=2, padding=1,
+                               bias=True)
+        self.bn1 = nn.BatchNorm2d(self.inplanes//2)'''
+        self.inplanes = 64
+        self.num_feats = num_feats
+        self.num_stacks = num_stacks
+        self.conv1 = nn.Conv2d(1, self.inplanes, kernel_size=7, stride=2, padding=3,
                                bias=True)
         self.bn1 = nn.BatchNorm2d(self.inplanes)
-        self.relu = nn.ReLU(inplace=True)
+        self.relu = nn.ReLU(inplace=False)
         self.layer1 = self._make_residual(block, self.inplanes, 1)
         self.layer2 = self._make_residual(block, self.inplanes, 1)
         self.layer3 = self._make_residual(block, self.num_feats, 1)
@@ -127,6 +134,8 @@ class HourglassNet(nn.Module):
         self.score = nn.ModuleList(score)
         self.fc_ = nn.ModuleList(fc_)
         self.score_ = nn.ModuleList(score_)
+
+        self._initialize_weights()
 
     def _make_residual(self, block, planes, blocks, stride=1):
         downsample = None
@@ -152,12 +161,29 @@ class HourglassNet(nn.Module):
                 bn,
                 self.relu,
             )
+    
+    def _initialize_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight)
+                if m.bias is not None:
+                    m.weight.data.normal_(0, 0.01)
+                    m.bias.data.zero_()
+            elif isinstance(m, nn.BatchNorm2d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
+            elif isinstance(m, nn.Linear):
+                m.weight.data.normal_(0, 0.01)
+                m.bias.data.zero_()
 
     def forward(self, x):
         out = []
         x = self.conv1(x)
         x = self.bn1(x)
+        #print(x.shape)
         x = self.relu(x)
+        #x = torch.cat((self.relu(x), self.relu(-x)), 1)
+        #print(x.shape)
 
         x = self.layer1(x)
         x = self.maxpool(x)
