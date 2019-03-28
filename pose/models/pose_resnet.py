@@ -169,7 +169,7 @@ def pose_resnet(**kwargs):
     cfg = get_default_network_config()
 
     block_type, layers, channels, name = resnet_spec[kwargs['resnet_layers']]
-    backbone_net = ResNetBackbone(block_type, layers)
+    backbone_net = ResNetBackbone(block_type, layers, in_channel=1 if kwargs['grayscale'] else 3)
     head_net = DeconvHead(
         channels[-1], cfg.num_deconv_layers,
         cfg.num_deconv_filters, cfg.num_deconv_kernel,

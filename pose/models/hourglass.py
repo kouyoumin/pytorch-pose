@@ -96,7 +96,7 @@ class Hourglass(nn.Module):
 
 class HourglassNet(nn.Module):
     '''Hourglass model from Newell et al ECCV 2016'''
-    def __init__(self, block, num_stacks=2, num_blocks=4, num_classes=16, num_feats = 128):
+    def __init__(self, block, num_stacks=2, num_blocks=4, num_classes=16, num_feats=128, grayscale=False):
         super(HourglassNet, self).__init__()
 
         '''self.inplanes = 16
@@ -108,7 +108,7 @@ class HourglassNet(nn.Module):
         self.inplanes = 64
         self.num_feats = num_feats
         self.num_stacks = num_stacks
-        self.conv1 = nn.Conv2d(1, self.inplanes, kernel_size=7, stride=2, padding=3,
+        self.conv1 = nn.Conv2d(1 if grayscale else 3, self.inplanes, kernel_size=7, stride=2, padding=3,
                                bias=True)
         self.bn1 = nn.BatchNorm2d(self.inplanes)
         self.relu = nn.ReLU(inplace=False)
@@ -165,14 +165,17 @@ class HourglassNet(nn.Module):
     def _initialize_weights(self):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
+                print('Initializing %s' % (str(m)))
                 nn.init.kaiming_normal_(m.weight)
                 if m.bias is not None:
                     m.weight.data.normal_(0, 0.01)
                     m.bias.data.zero_()
             elif isinstance(m, nn.BatchNorm2d):
+                print('Initializing %s' % (str(m)))
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
             elif isinstance(m, nn.Linear):
+                print('Initializing %s' % (str(m)))
                 m.weight.data.normal_(0, 0.01)
                 m.bias.data.zero_()
 
@@ -206,5 +209,5 @@ class HourglassNet(nn.Module):
 
 def hg(**kwargs):
     model = HourglassNet(Bottleneck, num_stacks=kwargs['num_stacks'], num_blocks=kwargs['num_blocks'],
-                         num_classes=kwargs['num_classes'])
+                         num_classes=kwargs['num_classes'], grayscale=kwargs['grayscale'])
     return model

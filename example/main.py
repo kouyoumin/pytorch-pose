@@ -23,6 +23,7 @@ import pose.models as models
 import pose.datasets as datasets
 import pose.losses as losses
 
+from adamW import AdamW
 
 # get model names and dataset names
 model_names = sorted(name for name in models.__dict__
@@ -48,6 +49,8 @@ def main(args):
     global best_acc
     global idx
 
+    print(args)
+
     # idx is the index of joints used to compute accuracy
     if args.dataset in ['mpii', 'lsp']:
         idx = [1,2,3,4,5,6,11,12,15,16]
@@ -71,22 +74,37 @@ def main(args):
                                        num_blocks=args.blocks,
                                        num_classes=njoints,
                                        resnet_layers=args.resnet_layers,
-                                       num_feats=args.features)
+                                       num_feats=args.features,
+                                       grayscale=True if args.dataset == 'cmuhand' else False)
 
-    model = torch.nn.DataParallel(model).to(device)
+    #model = torch.nn.DataParallel(model).to(device)
+    model = model.to(device)
 
     # define loss function (criterion) and optimizer
     criterion = losses.JointsMSELoss().to(device)
 
-    if args.solver == 'rms':
+    if args.solver == 'sgd':
+        optimizer = torch.optim.SGD(model.parameters(),
+                                    lr=args.lr,
+                                    momentum=args.momentum,
+                                    weight_decay=args.weight_decay,
+                                    nesterov=True)
+    elif args.solver == 'rms':
         optimizer = torch.optim.RMSprop(model.parameters(),
                                         lr=args.lr,
                                         momentum=args.momentum,
                                         weight_decay=args.weight_decay)
+    elif args.solver == 'adamw':
+        optimizer = AdamW(
+            model.parameters(),
+            lr=args.lr,
+            weight_decay=args.weight_decay
+        )
     elif args.solver == 'adam':
         optimizer = torch.optim.Adam(
             model.parameters(),
             lr=args.lr,
+            weight_decay=args.weight_decay
         )
     else:
         print('Unknown solver: {}'.format(args.solver))
@@ -117,13 +135,16 @@ def main(args):
 
     # create data loader
     train_dataset = datasets.__dict__[args.dataset](is_train=True, **vars(args))
+    print('Training set: %d' % (len(train_dataset)))
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=args.train_batch, shuffle=True,
-        num_workers=args.workers, pin_memory=True
+        num_workers=args.workers, pin_memory=True,
+        drop_last=True
     )
 
     val_dataset = datasets.__dict__[args.dataset](is_train=False, **vars(args))
+    print('Validation set: %d' % (len(val_dataset)))
     val_loader = torch.utils.data.DataLoader(
         val_dataset,
         batch_size=args.test_batch, shuffle=False,
@@ -170,6 +191,11 @@ def main(args):
             'best_acc': best_acc,
             'optimizer' : optimizer.state_dict(),
         }, predictions, is_best, checkpoint=args.checkpoint, snapshot=args.snapshot)
+        if is_best:
+            dummy_input = torch.randn(1, 1, args.inp_res, args.inp_res, device='cuda')
+            input_names = [ "input" ]
+            output_names = [ "output" ]
+            torch.onnx.export(model, dummy_input, os.path.join(args.checkpoint, 'export.onnx'), verbose=True, input_names=input_names, output_names=output_names)
 
     logger.close()
     logger.plot(['Train Acc', 'Val Acc'])
@@ -379,8 +405,8 @@ if __name__ == '__main__':
     parser.add_argument('-b', '--blocks', default=1, type=int, metavar='N',
                         help='Number of residual modules at each location in the hourglass')
     # Training strategy
-    parser.add_argument('--solver', metavar='SOLVER', default='rms',
-                        choices=['rms', 'adam'],
+    parser.add_argument('--solver', metavar='SOLVER', default='sgd',
+                        choices=['sgd', 'rms', 'adamw', 'adam'],
                         help='optimizers')
     parser.add_argument('-j', '--workers', default=1, type=int, metavar='N',
                         help='number of data loading workers (default: 4)')
@@ -388,15 +414,15 @@ if __name__ == '__main__':
                         help='number of total epochs to run')
     parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                         help='manual epoch number (useful on restarts)')
-    parser.add_argument('--train-batch', default=16, type=int, metavar='N',
+    parser.add_argument('--train-batch', default=32, type=int, metavar='N',
                         help='train batchsize')
-    parser.add_argument('--test-batch', default=16, type=int, metavar='N',
+    parser.add_argument('--test-batch', default=32, type=int, metavar='N',
                         help='test batchsize')
-    parser.add_argument('--lr', '--learning-rate', default=5e-4, type=float,
+    parser.add_argument('--lr', '--learning-rate', default=1e-4, type=float,
                         metavar='LR', help='initial learning rate')
     parser.add_argument('--momentum', default=0, type=float, metavar='M',
                         help='momentum')
-    parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float,
+    parser.add_argument('--weight-decay', '--wd', default=1e-5, type=float,
                         metavar='W', help='weight decay (default: 0)')
     parser.add_argument('--schedule', type=int, nargs='+', default=[40, 70, 90],
                         help='Decrease learning rate at these epochs.')
