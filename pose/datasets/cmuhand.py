@@ -27,23 +27,23 @@ class CmuHand(data.Dataset):
         self.rot_factor = kwargs['rot_factor']
         self.label_type = kwargs['label_type']
 
-        if is_train:
-            self.imglist = sorted(f for f in os.listdir(os.path.join(self.img_folder, 'train')) if f.endswith('.png'))
-        else:
-            self.imglist = sorted(f for f in os.listdir(os.path.join(self.img_folder, 'test')) if f.endswith('.png'))
-        #print(self.imglist)
+        self.subfolder = 'train' if is_train else 'test'
+
+        self.imglist = sorted(f for f in os.listdir(os.path.join(self.img_folder, self.subfolder)) if f.endswith('.png'))
+        #print('Training: %r' % (self.imglist))
+        
         self.imgs = []
         self.anno = []
         for filename in self.imglist:
-            img = cv2.imread(os.path.join(self.img_folder, 'train', filename), cv2.IMREAD_GRAYSCALE)
+            img = cv2.imread(os.path.join(self.img_folder, self.subfolder, filename), cv2.IMREAD_GRAYSCALE)
             if img is None:
                 continue
             annofile = filename[:-3]+'json'
-            with open(os.path.join(self.img_folder, 'train', annofile), 'r') as f:
+            with open(os.path.join(self.img_folder, self.subfolder, annofile), 'r') as f:
                 anno = json.load(f)
                 if anno is None:
                     continue
-                self.imgs.append(os.path.join(self.img_folder, 'train', filename))
+                self.imgs.append(os.path.join(self.img_folder, self.subfolder, filename))
                 self.anno.append(anno)
 
         assert(len(self.imgs)==len(self.anno))

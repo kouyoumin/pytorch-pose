@@ -1,6 +1,7 @@
 from __future__ import print_function, absolute_import
 
 import os
+import sys
 import argparse
 import time
 import matplotlib.pyplot as plt
@@ -24,6 +25,11 @@ import pose.datasets as datasets
 import pose.losses as losses
 
 from adamW import AdamW
+import numpy as np
+import cv2
+
+import caffe
+import convertCaffe
 
 # get model names and dataset names
 model_names = sorted(name for name in models.__dict__
@@ -195,7 +201,35 @@ def main(args):
             dummy_input = torch.randn(1, 1, args.inp_res, args.inp_res, device='cuda')
             input_names = [ "input" ]
             output_names = [ "output" ]
+            torch_out = model(dummy_input)[-1]
             torch.onnx.export(model, dummy_input, os.path.join(args.checkpoint, 'export.onnx'), verbose=True, input_names=input_names, output_names=output_names)
+            if os.path.isfile(os.path.join(args.checkpoint, 'export.onnx')):
+                import onnx
+                import caffe2.python.onnx.backend as onnx_caffe2_backend
+                onnx_model = onnx.load(os.path.join(args.checkpoint, 'export.onnx'))
+                prepared_backend = onnx_caffe2_backend.prepare(onnx_model)
+                W = {onnx_model.graph.input[0].name: dummy_input.cpu().data.numpy()}
+                c2_out = prepared_backend.run(W)[0]
+                np.testing.assert_almost_equal(torch_out.cpu().data.numpy(), c2_out, decimal=5)
+
+                c2_workspace = prepared_backend.workspace
+                c2_model = prepared_backend.predict_net
+                
+                from caffe2.python.predictor import mobile_exporter
+                init_net, predict_net = mobile_exporter.Export(c2_workspace, c2_model, c2_model.external_input)
+                with open(os.path.join(args.checkpoint, 'caffe2_init_net.pb'), "wb") as fopen:
+                    fopen.write(init_net.SerializeToString())
+                with open(os.path.join(args.checkpoint, 'caffe2_predict_net.pb'), "wb") as fopen:
+                    fopen.write(predict_net.SerializeToString())
+                
+                graph = convertCaffe.getGraph(os.path.join(args.checkpoint, 'export.onnx'))
+                convertCaffe.convertToCaffe(graph, os.path.join(args.checkpoint, 'export.prototxt'), os.path.join(args.checkpoint, 'export.caffemodel'))
+                caffe_model = caffe.Net(os.path.join(args.checkpoint, 'export.prototxt'), os.path.join(args.checkpoint, 'export.caffemodel'), caffe.TEST)
+                caffe_model.blobs['input'].data[...] = dummy_input.cpu().data.numpy()
+                out = caffe_model.forward()
+                np.testing.assert_almost_equal(torch_out.cpu().data.numpy(), out['output'], decimal=5)
+
+
 
     logger.close()
     logger.plot(['Train Acc', 'Val Acc'])
@@ -235,8 +269,8 @@ def train(train_loader, model, criterion, optimizer, debug=False, flip=True):
         acc = accuracy(output, target, idx)
 
         if debug: # visualize groundtruth and predictions
-            gt_batch_img = batch_with_heatmap(input, target)
-            pred_batch_img = batch_with_heatmap(input, output)
+            gt_batch_img = batch_with_heatmap(input, target, mean=train_loader.dataset.mean, std=train_loader.dataset.std)
+            pred_batch_img = batch_with_heatmap(input, output, mean=train_loader.dataset.mean, std=train_loader.dataset.std)
             if not gt_win or not pred_win:
                 ax1 = plt.subplot(121)
                 ax1.title.set_text('Groundtruth')
@@ -333,16 +367,18 @@ def validate(val_loader, model, criterion, num_classes, debug=False, flip=True):
 
 
             if debug:
-                gt_batch_img = batch_with_heatmap(input, target)
-                pred_batch_img = batch_with_heatmap(input, score_map)
+                gt_batch_img = batch_with_heatmap(input, target, mean=val_loader.dataset.mean, std=val_loader.dataset.std)
+                pred_batch_img = batch_with_heatmap(input, score_map, mean=val_loader.dataset.mean, std=val_loader.dataset.std)
                 if not gt_win or not pred_win:
                     plt.subplot(121)
                     gt_win = plt.imshow(gt_batch_img)
                     plt.subplot(122)
                     pred_win = plt.imshow(pred_batch_img)
+                    cv2.imwrite("%03d.png" % (i), cv2.cvtColor(np.concatenate((gt_batch_img, pred_batch_img), 1), cv2.COLOR_RGB2BGR))
                 else:
                     gt_win.set_data(gt_batch_img)
                     pred_win.set_data(pred_batch_img)
+                    cv2.imwrite("%03d.png" % (i), cv2.cvtColor(np.concatenate((gt_batch_img, pred_batch_img), 1), cv2.COLOR_RGB2BGR))
                 plt.pause(.05)
                 plt.draw()
 
@@ -416,7 +452,7 @@ if __name__ == '__main__':
                         help='manual epoch number (useful on restarts)')
     parser.add_argument('--train-batch', default=32, type=int, metavar='N',
                         help='train batchsize')
-    parser.add_argument('--test-batch', default=32, type=int, metavar='N',
+    parser.add_argument('--test-batch', default=4, type=int, metavar='N',
                         help='test batchsize')
     parser.add_argument('--lr', '--learning-rate', default=1e-4, type=float,
                         metavar='LR', help='initial learning rate')
