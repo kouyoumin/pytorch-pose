@@ -99,16 +99,10 @@ class HourglassNet(nn.Module):
     def __init__(self, block, num_stacks=2, num_blocks=4, num_classes=16, num_feats=128, grayscale=False):
         super(HourglassNet, self).__init__()
 
-        '''self.inplanes = 16
+        self.inplanes = 32
         self.num_feats = num_feats
         self.num_stacks = num_stacks
-        self.conv1 = nn.Conv2d(1, self.inplanes//2, kernel_size=3, stride=2, padding=1,
-                               bias=True)
-        self.bn1 = nn.BatchNorm2d(self.inplanes//2)'''
-        self.inplanes = 64
-        self.num_feats = num_feats
-        self.num_stacks = num_stacks
-        self.conv1 = nn.Conv2d(1 if grayscale else 3, self.inplanes, kernel_size=7, stride=2, padding=3,
+        self.conv1 = nn.Conv2d(1 if grayscale else 3, self.inplanes, kernel_size=3, stride=1, padding=1,
                                bias=True)
         self.bn1 = nn.BatchNorm2d(self.inplanes)
         self.relu = nn.ReLU(inplace=False)
