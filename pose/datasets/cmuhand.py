@@ -132,7 +132,7 @@ class CmuHand(data.Dataset):
 
         # Prepare image and groundtruth map
         #print(img_path, c, s, r)
-        inp = crop(img, c, s, [self.inp_res, self.inp_res], rot=r)
+        inp = crop(img, c, s, [self.inp_res, self.inp_res], rot=r, istrain=self.is_train)
         inp = color_normalize(inp, self.mean, self.std)
 
         # Generate ground truth

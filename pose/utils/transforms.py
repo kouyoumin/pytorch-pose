@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 import os
+import random
 import numpy as np
 import scipy.misc
 import matplotlib.pyplot as plt
@@ -126,7 +127,7 @@ def transform_preds(coords, center, scale, res):
     return coords
 
 
-def crop(img, center, scale, res, rot=0):
+def crop(img, center, scale, res, rot=0, istrain=False):
     img = im_to_numpy(img)
 
     # Preprocessing for efficient cropping
@@ -142,7 +143,10 @@ def crop(img, center, scale, res, rot=0):
             return torch.zeros(res[0], res[1], img.shape[2]) \
                         if len(img.shape) > 2 else torch.zeros(res[0], res[1])
         else:
-            img = scipy.misc.imresize(img, [new_ht, new_wd])
+            if istrain:
+                img = scipy.misc.imresize(img, [new_ht, new_wd], interp = random.choice(('nearest', 'lanczos', 'bilinear', 'bicubic', 'cubic')))
+            else:
+                img = scipy.misc.imresize(img, [new_ht, new_wd], interp = 'nearest')
             center = center * 1.0 / sf
             scale = scale / sf
 
@@ -172,7 +176,10 @@ def crop(img, center, scale, res, rot=0):
 
     if not rot == 0:
         # Remove padding
-        new_img = scipy.misc.imrotate(new_img, rot)
+        if istrain:
+            new_img = scipy.misc.imrotate(new_img, rot, interp = random.choice(('nearest', 'bilinear', 'bicubic', 'cubic')))
+        else:
+            new_img = scipy.misc.imrotate(new_img, rot, interp = 'nearest')
         new_img = new_img[pad:-pad, pad:-pad]
 
     new_img = im_to_torch(scipy.misc.imresize(new_img, res))
